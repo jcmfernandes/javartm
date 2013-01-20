@@ -1,0 +1,73 @@
+<project name="javartm" basedir="." default="main">
+	<property name="src.dir" value="src"/>
+	<property name="java.src.dir" value="${src.dir}/java"/>
+	<property name="c.src.dir" value="${src.dir}/c"/>
+
+	<property name="build.dir" value="build"/>
+	<property name="classes.dir" value="${build.dir}/classes"/>
+	<property name="jni.dir" value="${build.dir}/jni"/>
+
+	<property name="jars.dir" value="lib"/>
+	<property name="dist.dir" location="dist"/>
+	<property name="dist.version" value="0.1"/>
+	<property name="jar.file" value="${dist.dir}/javartm-${dist.version}.jar"/>
+
+	<path id="jars-classpath">
+		<fileset dir="${jars.dir}" >
+			<include name="*.jar"/>
+		</fileset>
+	</path>
+
+	<target name="clean">
+		<delete dir="${build.dir}"/>
+		<delete dir="${dist.dir}"/>
+	</target>
+
+	<target name="java-compile">
+		<mkdir dir="${classes.dir}"/>
+		<javac includeantruntime="false" srcdir="${java.src.dir}" destdir="${classes.dir}" debug="true" deprecation="true" debuglevel="lines,vars,source">
+			<compilerarg value="-Xlint:unchecked"/>
+			<classpath>
+				<path refid="jars-classpath"/>
+			</classpath>
+		</javac>
+	</target>
+
+	<target name="jni-headers" depends="java-compile">
+		<mkdir dir="${jni.dir}"/>
+		<javah destdir="${jni.dir}">
+			<classpath>
+				<path path="${classes.dir}"/>
+			</classpath>
+			<class name="javartm.Transaction"/>
+		</javah>
+	</target>
+
+	<!-- cpptasks support -->
+	<target name="jni-compile" depends="jni-headers">
+		<taskdef resource="cpptasks.tasks"/>
+		<cc outtype="shared" subsystem="console" objdir="${jni.dir}" outfile="${jni.dir}/javartm">
+			<compilerarg value="-Wall"/>
+			<compilerarg value="-O2"/>
+			<compilerarg value="-mrtm"/>
+			<fileset dir="${c.src.dir}" includes="**/*.c"/>
+			<includepath>
+				<path path="${java.home}/../include"/>
+				<path path="${jni.dir}"/>
+			</includepath>
+		</cc>
+	</target>
+
+	<target name="main" depends="clean,compile"/>
+
+	<!--<target name="jar" depends="main" description="Generates the javartm jar">
+		<mkdir dir="${dist.dir}"/>
+		<jar destfile="${jar.file}" basedir="${build.dir}"/>
+	</target>-->
+
+	<!-- aliases -->
+	<target name="compile" depends="jni-compile"/>
+	<target name="build" depends="compile"/>
+	<target name="clean-all" depends="clean"/>
+	<!--<target name="dist" depends="jar"/>-->
+</project>
