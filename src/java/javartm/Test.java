@@ -71,18 +71,18 @@ public class Test {
 
 		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ")");
 
-		/*System.out.println("Trying to perform transaction (using manual API)");
+		System.out.println("Trying to perform transaction (using manual API)");
 
 		res = false;
 
 		int txStatus = Transaction.begin();
-		if (txStatus != 0) {
+		if (Transaction.inTransaction()) {
 			x = 2;
 			y = 2;
 			res = true;
 			Transaction.commit();
 		}
 
-		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ")");*/
+		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ", txStatus: " + txStatus + ")");
 	}
 }
