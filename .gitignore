@@ -1,3 +1,6 @@
 build/
+dist/
+
 sde-rtm-*.txt
 hs_err_pid*.log
+pin-log.txt

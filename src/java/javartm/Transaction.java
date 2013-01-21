@@ -20,6 +20,7 @@
 
 package javartm;
 
+import java.io.*;
 import java.util.concurrent.Callable;
 
 import org.slf4j.Logger;
@@ -29,7 +30,31 @@ public class Transaction {
 	private static final Logger Log = LoggerFactory.getLogger(Transaction.class);
 
 	static {
-		System.loadLibrary("javartm");
+		// Attempt to load native library from jar
+		InputStream libFile = Transaction.class.getResourceAsStream("libjavartm.so");
+		if (libFile != null) {
+			try {
+				// Native libraries *have* to be loaded from a file, so we
+				// create a temporary file, dump the native library from the
+				// jar, and then load it from there
+				File f = File.createTempFile("libjavartm", "so");
+				f.deleteOnExit();
+				FileOutputStream fos = new FileOutputStream(f);
+				int read;
+				byte[] buffer = new byte[4096];
+				while ((read = libFile.read(buffer, 0, buffer.length)) != -1) {
+					fos.write(buffer, 0, read);
+				}
+				fos.close();
+				Runtime.getRuntime().load(f.getCanonicalPath());
+			} catch (IOException e) {
+				Log.warn("Exception trying to load native library", e);
+			}
+		} else {
+			// Embedded libjavartm.so not found, trying to load directly
+			System.loadLibrary("javartm");
+		}
+
 		if (!rtmAvailable()) {
 			Log.warn("RTM not supported by current CPU. Attempting to use it may lead to JVM crashes");
 		}

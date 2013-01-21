@@ -1,4 +1,4 @@
-<project name="javartm" basedir="." default="main">
+<project name="javartm" basedir="." default="jar">
 	<property name="src.dir" value="src"/>
 	<property name="java.src.dir" value="${src.dir}/java"/>
 	<property name="c.src.dir" value="${src.dir}/c"/>
@@ -6,6 +6,8 @@
 	<property name="build.dir" value="build"/>
 	<property name="classes.dir" value="${build.dir}/classes"/>
 	<property name="jni.dir" value="${build.dir}/jni"/>
+	<property name="jnioutput.dir" value="${jni.dir}/javartm"/>
+	<property name="jnilib.file" value="${jnioutput.dir}/javartm"/>
 
 	<property name="jars.dir" value="lib"/>
 	<property name="dist.dir" location="dist"/>
@@ -46,7 +48,8 @@
 	<!-- cpptasks support -->
 	<target name="jni-compile" depends="jni-headers">
 		<taskdef resource="cpptasks.tasks"/>
-		<cc outtype="shared" subsystem="console" objdir="${jni.dir}" outfile="${jni.dir}/javartm">
+		<mkdir dir="${jnioutput.dir}"/>
+		<cc outtype="shared" subsystem="console" objdir="${jni.dir}" outfile="${jnilib.file}">
 			<compilerarg value="-Wall"/>
 			<compilerarg value="-O2"/>
 			<compilerarg value="-mrtm"/>
@@ -58,16 +61,28 @@
 		</cc>
 	</target>
 
-	<target name="main" depends="clean,compile"/>
+	<target name="build" depends="clean,jni-compile" description="Builds javartm (java and native resources)"/>
 
-	<!--<target name="jar" depends="main" description="Generates the javartm jar">
+	<target name="jar" depends="build" description="Generates the javartm jar">
 		<mkdir dir="${dist.dir}"/>
-		<jar destfile="${jar.file}" basedir="${build.dir}"/>
-	</target>-->
+		<jar destfile="${jar.file}">
+			<manifest>
+				<!-- Who is building this jar? -->
+				<attribute name="Built-By" value="${user.name}"/>
+				<!-- Information about the program itself -->
+				<attribute name="Implementation-Vendor" value="javartm project"/>
+				<attribute name="Implementation-Title" value="javartm"/>
+				<attribute name="Implementation-Version" value="${dist.version}"/>
+			</manifest>
+
+			<fileset dir="${classes.dir}" excludes="**/Test*.class"/>
+			<fileset dir="${jni.dir}" includes="**/*.so"/>
+		</jar>
+	</target>
 
 	<!-- aliases -->
-	<target name="compile" depends="jni-compile"/>
-	<target name="build" depends="compile"/>
+	<target name="main" depends="build"/>
+	<target name="compile" depends="build"/>
 	<target name="clean-all" depends="clean"/>
 	<!--<target name="dist" depends="jar"/>-->
 </project>
