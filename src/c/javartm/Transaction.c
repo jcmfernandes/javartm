@@ -44,6 +44,7 @@
 
 // Other stuff
 #include <stdio.h>
+// JNI note: When doing a FindClass/GetMethodId/... fails, we just have to return, as the JVM will automatically throw an exception due to the failure
 
 JNIEXPORT jboolean JNICALL Java_javartm_Transaction_rtmAvailable(JNIEnv *env, jclass cls) {
 	unsigned int eax, ebx, ecx, edx;
@@ -63,7 +64,15 @@ JNIEXPORT jint JNICALL Java_javartm_Transaction_begin(JNIEnv *env, jclass cls) {
 }
 
 JNIEXPORT void JNICALL Java_javartm_Transaction_commit(JNIEnv *env, jclass cls) {
-	_xend();
+	if (_xtest()) {
+		_xend();
+	} else {
+		// Tried to commit without active transaction
+		// If we call _xend() we'll get a segfault
+		jclass excClass = (*env)->FindClass(env, "java/lang/IllegalStateException");
+		if (!excClass) return;
+		(*env)->ThrowNew(env, excClass, "No active transaction to be committed");
+	}
 }
 
 JNIEXPORT void JNICALL Java_javartm_Transaction_abort(JNIEnv *env, jclass cls) {
@@ -74,10 +83,7 @@ JNIEXPORT jobject JNICALL Java_javartm_Transaction_doTransactionally(JNIEnv *env
 	// TODO: Add some caching
 	jclass atomicBlockClass = (*env)->GetObjectClass(env, atomicBlock);
 	jmethodID callMethodId = (*env)->GetMethodID(env, atomicBlockClass, "call", "()Ljava/lang/Object;");
-	if (callMethodId == NULL) {
-		printf("Error finding method\n");
-		return NULL;
-	}
+	if (!callMethodId) return NULL;
 
 	printf("Preparing execution...\n");
 	int res = _xbegin();
@@ -91,10 +97,7 @@ JNIEXPORT jobject JNICALL Java_javartm_Transaction_doTransactionally(JNIEnv *env
 	printf("Abort or failed to start tx res = %d\n", res);
 	jclass fallbackBlockClass = (*env)->GetObjectClass(env, fallbackBlock);
 	callMethodId = (*env)->GetMethodID(env, fallbackBlockClass, "call", "()Ljava/lang/Object;");
-	if (callMethodId == NULL) {
-		printf("Error finding method\n");
-		return NULL;
-	}
+	if (!callMethodId) return NULL;
 	return (*env)->CallObjectMethod(env, fallbackBlock, callMethodId);
 }
 

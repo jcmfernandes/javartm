@@ -71,6 +71,8 @@ public class Test {
 
 		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ")");
 
+		// --
+
 		System.out.println("Trying to perform transaction (using manual API)");
 
 		res = false;
@@ -84,5 +86,16 @@ public class Test {
 		}
 
 		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ", txStatus: " + txStatus + ")");
+
+		// --
+
+		System.out.println("Trying to commit without an active transaction...");
+		try {
+			Transaction.commit();
+			throw new AssertionError("Should never happen");
+		} catch (IllegalStateException e) {
+			System.out.println("Successfully got an exception...");
+			e.printStackTrace();
+		}
 	}
 }
