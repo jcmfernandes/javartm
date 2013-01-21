@@ -12,7 +12,9 @@
 	<property name="jars.dir" value="lib"/>
 	<property name="dist.dir" location="dist"/>
 	<property name="dist.version" value="0.1"/>
-	<property name="jar.file" value="${dist.dir}/javartm-${dist.version}.jar"/>
+	<property name="jar.filename" value="javartm-${dist.version}.jar"/>
+	<property name="jar.file" value="${dist.dir}/${jar.filename}"/>
+	<property name="jarfat.file" value="${dist.dir}/javartm-fat-${dist.version}.jar"/>
 
 	<path id="jars-classpath">
 		<fileset dir="${jars.dir}" >
@@ -77,6 +79,26 @@
 
 			<fileset dir="${classes.dir}" excludes="**/Test*.class"/>
 			<fileset dir="${jni.dir}" includes="**/*.so"/>
+		</jar>
+	</target>
+
+	<target name="fat-jar" depends="jar" description="Generates a fat javartm jar including all dependencies">
+		<jar destfile="${jarfat.file}">
+			<manifest>
+				<!-- Who is building this jar? -->
+				<attribute name="Built-By" value="${user.name}"/>
+				<!-- Information about the program itself -->
+				<attribute name="Implementation-Vendor" value="javartm project"/>
+				<attribute name="Implementation-Title" value="javartm"/>
+				<attribute name="Implementation-Version" value="${dist.version}"/>
+			</manifest>
+
+			<archives>
+				<zips>
+					<fileset dir="${jars.dir}" includes="**/*.jar"/>
+					<fileset dir="${dist.dir}" includes="${jar.filename}"/>
+				</zips>
+			</archives>
 		</jar>
 	</target>
 
