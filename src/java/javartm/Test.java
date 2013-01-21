@@ -97,5 +97,16 @@ public class Test {
 			System.out.println("Successfully got an exception...");
 			e.printStackTrace();
 		}
+
+		// --
+
+		System.out.println("Trying to abort without an active transaction...");
+		try {
+			Transaction.abort();
+			System.out.println("Error: After abort!");
+		} catch (IllegalStateException e) {
+			System.out.println("Successfully got an exception...");
+			e.printStackTrace();
+		}
 	}
 }

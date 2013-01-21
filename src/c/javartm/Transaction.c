@@ -76,7 +76,15 @@ JNIEXPORT void JNICALL Java_javartm_Transaction_commit(JNIEnv *env, jclass cls) 
 }
 
 JNIEXPORT void JNICALL Java_javartm_Transaction_abort(JNIEnv *env, jclass cls) {
-	_xabort(0);
+	if (_xtest()) {
+		_xabort(0);
+	} else {
+		// Tried to abort without active transaction
+		// Throw an exception so that user code after the abort doesn't continue running
+		jclass excClass = (*env)->FindClass(env, "java/lang/IllegalStateException");
+		if (!excClass) return;
+		(*env)->ThrowNew(env, excClass, "No active transaction to be aborted");
+	}
 }
 
 JNIEXPORT jobject JNICALL Java_javartm_Transaction_doTransactionally(JNIEnv *env, jclass cls, jobject atomicBlock, jobject fallbackBlock) {
