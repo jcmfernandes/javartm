@@ -108,5 +108,32 @@ public class Test {
 			System.out.println("Successfully got an exception...");
 			e.printStackTrace();
 		}
+
+		// --
+
+		System.out.println("Trying abort(0 -> 255)");
+		int statusZero = 0;
+		int retry = 0;
+		for (int i = 0; i <= 255; i++) {
+			txStatus = Transaction.begin();
+			if (Transaction.inTransaction()) {
+				Transaction.abort(i);
+			}
+			if (((txStatus & 1) != 0) && ((txStatus >>> 24) != i)) {
+				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus);
+			} else if (txStatus == 0) {
+				statusZero++;
+			} else if (txStatus == 6) {
+				retry++;
+			} else if ((txStatus & 1) == 0) {
+				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus + " (bit 0 unset)");
+			}
+		}
+		System.out.println("abort(0 -> 255) results: " + (255 - statusZero - retry) + " correct status codes; " +
+					statusZero + " times status == 0; " + retry + " may retry");
+
+		// --
+
+		System.out.println("Finished testing!");
 	}
 }

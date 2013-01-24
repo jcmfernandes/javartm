@@ -65,7 +65,12 @@ public class Transaction {
 	public native static int begin();
 	public native static void commit();
 	public native static void abort();
-	//public native static void abort(byte reason);
+
+	/**
+	 * Abort and set returned status code.
+	 * Note that reason MUST FIT as unsigned 8bits [0,255], otherwise it will be set to 0.
+	 **/
+	public native static void abort(long reason);
 
 	public native static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
 }
