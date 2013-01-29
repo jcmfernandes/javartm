@@ -26,8 +26,10 @@ import java.util.concurrent.Callable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class Transaction {
+public final class Transaction {
 	private static final Logger Log = LoggerFactory.getLogger(Transaction.class);
+
+	public static final boolean RTM_AVAILABLE;
 
 	static {
 		// Attempt to load native library from jar
@@ -55,12 +57,18 @@ public class Transaction {
 			System.loadLibrary("javartm");
 		}
 
-		if (!rtmAvailable()) {
+		RTM_AVAILABLE = rtmAvailable();
+
+		if (!RTM_AVAILABLE) {
 			Log.warn("RTM not supported by current CPU. Attempting to use it may lead to JVM crashes");
 		}
 	}
 
-	public native static boolean rtmAvailable();
+	/**
+	 * Test CPU for RTM support.
+	 */
+	private native static boolean rtmAvailable();
+
 	public native static boolean inTransaction();
 	public native static int begin();
 	public native static void commit();

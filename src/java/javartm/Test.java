@@ -27,12 +27,6 @@ public class Test {
 	public static int y = 0;
 
 	public static void main(String[] args) {;
-		if (Transaction.rtmAvailable()) {
-			System.out.println("RTM is available");
-		} else {
-			System.out.println("RTM support does not seem to be available, proceeding anyway...");
-		}
-
 		boolean res;
 
 		// --
