@@ -72,7 +72,7 @@ public class Test {
 		res = false;
 
 		int txStatus = Transaction.begin();
-		if (Transaction.inTransaction()) {
+		if (txStatus == Transaction.STARTED) {
 			x = 2;
 			y = 2;
 			res = true;
@@ -110,16 +110,16 @@ public class Test {
 		int retry = 0;
 		for (int i = 0; i <= 255; i++) {
 			txStatus = Transaction.begin();
-			if (Transaction.inTransaction()) {
+			if (txStatus == Transaction.STARTED) {
 				Transaction.abort(i);
 			}
-			if (((txStatus & 1) != 0) && ((txStatus >>> 24) != i)) {
+			if (((txStatus & Transaction.ABORT_EXPLICIT) != 0) && (Transaction.getAbortReason(txStatus) != i)) {
 				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus);
 			} else if (txStatus == 0) {
 				statusZero++;
-			} else if (txStatus == 6) {
+			} else if ((txStatus & Transaction.ABORT_RETRY) != 0) {
 				retry++;
-			} else if ((txStatus & 1) == 0) {
+			} else if ((txStatus & Transaction.ABORT_EXPLICIT) == 0) {
 				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus + " (bit 0 unset)");
 			}
 		}

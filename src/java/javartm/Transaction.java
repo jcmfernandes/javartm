@@ -29,6 +29,15 @@ import org.slf4j.LoggerFactory;
 public final class Transaction {
 	private static final Logger Log = LoggerFactory.getLogger(Transaction.class);
 
+	public static final int STARTED		= -1;
+
+	public static final int ABORT_EXPLICIT 	= 1 << 0;
+	public static final int ABORT_RETRY 	= 1 << 1;
+	public static final int ABORT_CONFLICT 	= 1 << 2;
+	public static final int ABORT_CAPACITY 	= 1 << 3;
+	public static final int ABORT_DEBUG 	= 1 << 4;
+	public static final int ABORT_NESTED 	= 1 << 5;
+
 	public static final boolean RTM_AVAILABLE;
 
 	static {
@@ -81,4 +90,8 @@ public final class Transaction {
 	public native static void abort(long reason);
 
 	public native static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
+
+	public static short getAbortReason(int txStatus) {
+		return (short) (txStatus >>> 24);
+	}
 }
