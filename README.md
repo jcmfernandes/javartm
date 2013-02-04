@@ -14,7 +14,9 @@ Testing on other CPUs can be done using the [Intel Software Development Emulator
 
 ## Building
 
-Building is done with ant, and requires the [ant-cpptasks][ant-cpptasks] library. Note that the `ant-contrib-cpptasks` package in Ubuntu is not installed to the right place, and ant will not be able to use it automatically.
+Building is done with ant, and requires the [ant-cpptasks][ant-cpptasks] library.
+
+Note that the `ant-contrib-cpptasks` package in Ubuntu is not installed to the right place, and ant will not be able to use it automatically. (To fix it, run `sudo ln -sf /usr/share/java/ant-contrib-cpptasks.jar /usr/share/ant/lib/.`)
 
 Building also requires gcc >= 4.8, as this is the first version that adds support for the RTM instructions. It might be possible to use icc or others (feedback on this is appreciated).
 
