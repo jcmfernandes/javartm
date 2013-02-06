@@ -71,7 +71,7 @@ public class Test {
 
 		res = false;
 
-		int txStatus = Transaction.begin();
+		long txStatus = Transaction.begin();
 		if (txStatus == Transaction.STARTED) {
 			x = 2;
 			y = 2;
@@ -111,7 +111,7 @@ public class Test {
 		for (int i = 0; i <= 255; i++) {
 			txStatus = Transaction.begin();
 			if (txStatus == Transaction.STARTED) {
-				Transaction.abort(i);
+				Transaction.abort((short) i);
 			}
 			if (((txStatus & Transaction.ABORT_EXPLICIT) != 0) && (Transaction.getAbortReason(txStatus) != i)) {
 				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus);

@@ -14,4 +14,4 @@ export LD_LIBRARY_PATH=$JNI_DIR:$LD_LIBRARY_PATH
 
 # put custom gcc 4.8 git build in path
 # this is specific to my machine, modify this accordingly if needed
-export PATH=~/projects/intel-htm/gcc/bin/:$PATH
+#export PATH=~/projects/intel-htm/gcc/bin/:$PATH

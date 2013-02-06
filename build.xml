@@ -54,7 +54,7 @@
 		<cc outtype="shared" subsystem="console" objdir="${jni.dir}" outfile="${jnilib.file}">
 			<compilerarg value="-Wall"/>
 			<compilerarg value="-O2"/>
-			<compilerarg value="-mrtm"/>
+			<!-- <compilerarg value="-mrtm"/> -->
 			<fileset dir="${c.src.dir}" includes="**/*.c"/>
 			<includepath>
 				<path path="${java.home}/../include"/>

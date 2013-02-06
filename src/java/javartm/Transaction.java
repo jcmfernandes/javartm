@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 public final class Transaction {
 	private static final Logger Log = LoggerFactory.getLogger(Transaction.class);
 
-	public static final int STARTED		= -1;
+	public static final long STARTED		= 0xFFFFFFFF;
 
 	public static final int ABORT_EXPLICIT 	= 1 << 0;
 	public static final int ABORT_RETRY 	= 1 << 1;
@@ -78,20 +78,67 @@ public final class Transaction {
 	 */
 	private native static boolean rtmAvailable();
 
-	public native static boolean inTransaction();
-	public native static int begin();
-	public native static void commit();
-	public native static void abort();
+	private native static boolean n_inTransaction();
+	private native static long n_begin();
+	private native static void n_commit();
 
 	/**
 	 * Abort and set returned status code.
 	 * Note that reason MUST FIT as unsigned 8bits [0,255], otherwise it will be set to 0.
 	 **/
-	public native static void abort(long reason);
+	private native static void n_abort(long reason);
 
-	public native static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
-
-	public static short getAbortReason(int txStatus) {
-		return (short) (txStatus >>> 24);
+	private native static <V> V n_doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
+	
+	/**
+	 * The public API.
+	 **/
+	public static short getAbortReason(long txStatus) {
+		return (short) (((int) txStatus) >>> 24);
+	}
+	
+	public static boolean inTransaction() {
+		if (RTM_AVAILABLE) return n_inTransaction();
+		return false; // throw exception?
+	}
+	
+	public static long begin(int tries) {
+		if (! RTM_AVAILABLE) return -1; // throw exception? most likely yes!
+		
+		long status;
+		if (tries > 0) {
+			do {
+				tries--;
+				status = n_begin();
+			} while(status != STARTED && tries > 0);
+			return status;
+		} else {
+			do {
+				status = n_begin();
+			} while(status != STARTED);
+			return status;
+		}
+	}
+	
+	public static long begin() {
+		return begin(1);
+	}
+	
+	public static void commit() {
+		if (RTM_AVAILABLE) n_commit();
+	}
+	
+	public static void abort() {
+		if (RTM_AVAILABLE) n_abort(0L);
+	}
+	
+	public static void abort(short reason) {
+		if (reason < 0 || reason > 255) throw new RuntimeException("ui");
+		if (RTM_AVAILABLE) n_abort((long) reason);
+	}
+	
+	public static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock) {
+		if (RTM_AVAILABLE) return n_doTransactionally(atomicBlock, fallbackBlock);
+		throw new RuntimeException("lala");
 	}
 }
