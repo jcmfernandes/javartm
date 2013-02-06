@@ -20,8 +20,6 @@ Note that the `ant-contrib-cpptasks` package in Ubuntu is not installed to the r
 
 Building was tested and works with GCC 4.7.2. It should be possible to use icc or others (feedback on this is appreciated).
 
-As of this writing, there is no stable release of gcc 4.8 --- you will need to obtain or build your own.
-
 I plan on providing binary packages of javartm soon. If they aren't up yet, feel free to mail me to ask for one.
 
 ## Testing with Intel SDE
