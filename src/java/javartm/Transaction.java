@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 public final class Transaction {
 	private static final Logger Log = LoggerFactory.getLogger(Transaction.class);
 
-	public static final long STARTED		= 0xFFFFFFFF;
+	public static final int STARTED			= 0xFFFFFFFF;
 
 	public static final int ABORT_EXPLICIT 	= 1 << 0;
 	public static final int ABORT_RETRY 	= 1 << 1;
@@ -38,7 +38,10 @@ public final class Transaction {
 	public static final int ABORT_DEBUG 	= 1 << 4;
 	public static final int ABORT_NESTED 	= 1 << 5;
 
-	public static final boolean RTM_AVAILABLE;
+	private static final boolean RTM_AVAILABLE;
+	
+	private static final TransactionException NO_RTM_HARDWARE = new TransactionException("RTM not supported by current CPU");
+	private static final TransactionException NO_ACTIVE_TX = new TransactionException("No active transaction");
 
 	static {
 		// Attempt to load native library from jar
@@ -66,79 +69,117 @@ public final class Transaction {
 			System.loadLibrary("javartm");
 		}
 
-		RTM_AVAILABLE = rtmAvailable();
-
+		RTM_AVAILABLE = n_rtmAvailable();
 		if (!RTM_AVAILABLE) {
 			Log.warn("RTM not supported by current CPU. Attempting to use it may lead to JVM crashes");
 		}
 	}
+	
+	/**
+	 * The private, native API.
+	 */
 
 	/**
 	 * Test CPU for RTM support.
 	 */
-	private native static boolean rtmAvailable();
-
+	private native static boolean n_rtmAvailable();
+	
 	private native static boolean n_inTransaction();
-	private native static long n_begin();
-	private native static void n_commit();
-
+	
+	private native static int n_begin();
+	private native static boolean n_commit();
 	/**
 	 * Abort and set returned status code.
 	 * Note that reason MUST FIT as unsigned 8bits [0,255], otherwise it will be set to 0.
 	 **/
-	private native static void n_abort(long reason);
+	private native static boolean n_abort(long reason);
 
-	private native static <V> V n_doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
+	//private native static <V> V n_doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
 	
 	/**
 	 * The public API.
 	 **/
-	public static short getAbortReason(long txStatus) {
-		return (short) (((int) txStatus) >>> 24);
+	public static short getAbortReason(int txStatus) {
+		return (short) (txStatus >>> 24);
 	}
 	
 	public static boolean inTransaction() {
-		if (RTM_AVAILABLE) return n_inTransaction();
-		return false; // throw exception?
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		
+		return n_inTransaction();
 	}
 	
-	public static long begin(int tries) {
-		if (! RTM_AVAILABLE) return -1; // throw exception? most likely yes!
+	public static int begin(int tries) {
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
 		
-		long status;
+		int txStatus;
 		if (tries > 0) {
 			do {
 				tries--;
-				status = n_begin();
-			} while(status != STARTED && tries > 0);
-			return status;
+				txStatus = n_begin();
+			} while(txStatus != STARTED && tries > 0);
 		} else {
 			do {
-				status = n_begin();
-			} while(status != STARTED);
-			return status;
+				txStatus = n_begin();
+			} while(txStatus != STARTED);
 		}
+		
+		return txStatus;
 	}
 	
-	public static long begin() {
-		return begin(1);
+	public static int begin() {
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		
+		return n_begin();
 	}
 	
 	public static void commit() {
-		if (RTM_AVAILABLE) n_commit();
-	}
-	
-	public static void abort() {
-		if (RTM_AVAILABLE) n_abort(0L);
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		
+		final boolean status = n_commit();
+		if (! status) throw NO_ACTIVE_TX;
 	}
 	
 	public static void abort(short reason) {
-		if (reason < 0 || reason > 255) throw new RuntimeException("ui");
-		if (RTM_AVAILABLE) n_abort((long) reason);
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		
+		if (reason < 0 || reason > 255) {
+			throw new TransactionException("Abort reason has to be in the range [0;255] but " + reason + " was passed");
+		}
+		final boolean status = n_abort((long) reason);
+		if (! status) throw NO_ACTIVE_TX;
 	}
 	
-	public static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock) {
-		if (RTM_AVAILABLE) return n_doTransactionally(atomicBlock, fallbackBlock);
-		throw new RuntimeException("lala");
+	public static void abort() {
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		
+		final boolean status = n_abort(0L);
+		if (! status) throw NO_ACTIVE_TX;
+	}
+	
+	public static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock) throws Exception {
+		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		
+		int txStatus;
+		while (true) {
+			if ((txStatus = Transaction.begin()) == STARTED) {
+				V returnObject = atomicBlock.call();
+				Transaction.commit();
+				return returnObject;
+			} else if ((txStatus & ABORT_EXPLICIT) == 0) {
+				continue;
+			} else if (fallbackBlock == null) {
+				throw new ExplicitAbortException(getAbortReason(txStatus));
+			} else {
+				if (fallbackBlock instanceof FallbackBlock) {
+					((FallbackBlock) fallbackBlock).setAbortCode(txStatus);
+				}
+				return fallbackBlock.call();
+			}
+		}
+	}
+	
+	public static <V> V doTransactionally(Callable<V> atomicBlock) throws Exception {
+		return doTransactionally(atomicBlock, null);
 	}
 }

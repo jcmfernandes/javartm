@@ -26,38 +26,37 @@
 
 // Other stuff
 #include <stdio.h>
+#include <stdint.h>
 // JNI note: When doing a FindClass/GetMethodId/... fails, we just have to return, as the JVM will automatically throw an exception due to the failure
 
-JNIEXPORT jboolean JNICALL Java_javartm_Transaction_rtmAvailable(JNIEnv *env, jclass cls) {
+JNIEXPORT jboolean JNICALL Java_javartm_Transaction_n_1rtmAvailable(JNIEnv *env, jclass cls) {
 	return CPUID_RTM_CHECK() ?  1 : 0;
 }
 
 JNIEXPORT jboolean JNICALL Java_javartm_Transaction_n_1inTransaction(JNIEnv *env, jclass cls) {
-	if (XTEST()) return 1;
-	return 0;
+	return XTEST() ? 1 : 0;
 }
 
-JNIEXPORT jlong JNICALL Java_javartm_Transaction_n_1begin(JNIEnv *env, jclass cls) {
+JNIEXPORT jint JNICALL Java_javartm_Transaction_n_1begin(JNIEnv *env, jclass cls) {
 	__label__ failure;
-	unsigned status = 0xFFFFFFFF;
+	uint32_t status = 0xFFFFFFFF;
 	XBEGIN(failure);
 	XFAIL_STATUS(failure, status);
-	return (jlong) status;
+	return (jint) status;
 }
 
-JNIEXPORT void JNICALL Java_javartm_Transaction_n_1commit(JNIEnv *env, jclass cls) {
+JNIEXPORT jboolean JNICALL Java_javartm_Transaction_n_1commit(JNIEnv *env, jclass cls) {
 	if (XTEST()) {
 		XEND();
+		return 1;
 	} else {
 		// Tried to commit without active transaction
 		// If we call XEND() we'll get a segfault
-		jclass excClass = (*env)->FindClass(env, "java/lang/IllegalStateException");
-		if (!excClass) return;
-		(*env)->ThrowNew(env, excClass, "No active transaction to be committed");
+		return 0;
 	}
 }
 
-JNIEXPORT void JNICALL Java_javartm_Transaction_n_1abort(JNIEnv *env, jclass cls, jlong reason) {
+JNIEXPORT jboolean JNICALL Java_javartm_Transaction_n_1abort(JNIEnv *env, jclass cls, jlong reason) {
 	// I don't know why (register clobbering? bug?), but if reason is 32bits, then the returned
 	// result after XABORT is always 0. Having reason as a long seems to work, don't know why.
 	if (XTEST()) {
@@ -323,16 +322,16 @@ JNIEXPORT void JNICALL Java_javartm_Transaction_n_1abort(JNIEnv *env, jclass cls
 			case 255: XABORT(255);
 			 default: XABORT(0);
 		}
+		
+		return 1; // never reached!
 	} else {
 		// Tried to abort without active transaction
 		// Throw an exception so that user code after the abort doesn't continue running
-		jclass excClass = (*env)->FindClass(env, "java/lang/IllegalStateException");
-		if (!excClass) return;
-		(*env)->ThrowNew(env, excClass, "No active transaction to be aborted");
+		return 0;
 	}
 }
 
-JNIEXPORT jobject JNICALL Java_javartm_Transaction_n_1doTransactionally(JNIEnv *env, jclass cls, jobject atomicBlock, jobject fallbackBlock) {
+/*JNIEXPORT jobject JNICALL Java_javartm_Transaction_n_1doTransactionally(JNIEnv *env, jclass cls, jobject atomicBlock, jobject fallbackBlock) {
 	__label__ failure;
 	
 	// TODO: Add some caching
@@ -341,7 +340,7 @@ JNIEXPORT jobject JNICALL Java_javartm_Transaction_n_1doTransactionally(JNIEnv *
 	if (!callMethodId) return NULL;
 
 	printf("Preparing execution...\n");
-	unsigned status = 0xFFFFFFFF;
+	uint32_t status = 0xFFFFFFFF;
 	XBEGIN(failure);
 	jobject retValue = (*env)->CallObjectMethod(env, atomicBlock, callMethodId);
 	XEND();
@@ -351,7 +350,14 @@ JNIEXPORT jobject JNICALL Java_javartm_Transaction_n_1doTransactionally(JNIEnv *
 	XFAIL_STATUS(failure, status);
 	printf("Abort or failed to start tx status = %d\n", status);
 	jclass fallbackBlockClass = (*env)->GetObjectClass(env, fallbackBlock);
+	jclass fallbackInterfaceClass = (*env)->FindClass(env, "javartm/FallbackBlock");
+	if ((*env)->IsInstanceOf(env, fallbackBlock, fallbackInterfaceClass)) {
+		jvalue args[1];
+		args[0].i = (jint) status;
+		callMethodId = (*env)->GetMethodID(env, fallbackInterfaceClass, "setAbortCode", "(I)V;");
+		(*env)->CallVoidMethodA(env, fallbackBlock, callMethodId, args);
+	}
 	callMethodId = (*env)->GetMethodID(env, fallbackBlockClass, "call", "()Ljava/lang/Object;");
 	if (!callMethodId) return NULL;
 	return (*env)->CallObjectMethod(env, fallbackBlock, callMethodId);
-}
+}*/

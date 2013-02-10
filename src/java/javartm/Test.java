@@ -27,12 +27,13 @@ public class Test {
 	public static int y = 0;
 
 	public static void main(String[] args) {;
-		boolean res;
+		boolean res = false;
 
 		// --
 
 		System.out.println("Trying to perform transaction (using doTransactionally)");
 
+		try {
 		res = Transaction.doTransactionally(new Callable<Boolean>() {
 			public Boolean call() {
 				x = 1;
@@ -44,6 +45,7 @@ public class Test {
 				return false;
 			}
 		});
+		} catch (Exception e) { }
 
 		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ")");
 
@@ -51,6 +53,7 @@ public class Test {
 
 		System.out.println("Testing abort (using doTransactionally)");
 
+		try {
 		res = Transaction.doTransactionally(new Callable<Boolean>() {
 			public Boolean call() {
 				Transaction.abort();
@@ -62,6 +65,7 @@ public class Test {
 				return true;
 			}
 		});
+		} catch (Exception e) { }
 
 		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ")");
 
@@ -71,7 +75,7 @@ public class Test {
 
 		res = false;
 
-		long txStatus = Transaction.begin();
+		int txStatus = Transaction.begin();
 		if (txStatus == Transaction.STARTED) {
 			x = 2;
 			y = 2;
@@ -87,7 +91,7 @@ public class Test {
 		try {
 			Transaction.commit();
 			throw new AssertionError("Should never happen");
-		} catch (IllegalStateException e) {
+		} catch (TransactionException e) {
 			System.out.println("Successfully got an exception...");
 			e.printStackTrace();
 		}
@@ -98,7 +102,7 @@ public class Test {
 		try {
 			Transaction.abort();
 			System.out.println("Error: After abort!");
-		} catch (IllegalStateException e) {
+		} catch (TransactionException e) {
 			System.out.println("Successfully got an exception...");
 			e.printStackTrace();
 		}
