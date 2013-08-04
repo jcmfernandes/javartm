@@ -20,6 +20,17 @@
  
 package javartm;
  
-public class TransactionException extends RuntimeException {
-	TransactionException(String msg) { super(msg); };
+public class CommitException extends RuntimeException {
+
+	private static final long serialVersionUID = 1L;
+
+	private final int txStatus;
+	
+	CommitException(int status) {
+		this.txStatus = status;
+	}
+	
+	public int getTxStatus() {
+		return txStatus;
+	}
 }

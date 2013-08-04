@@ -20,8 +20,16 @@
 
 package javartm;
 
-import java.io.*;
+import static javartm.TransactionStatus.*;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Semaphore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,19 +37,12 @@ import org.slf4j.LoggerFactory;
 public final class Transaction {
 	private static final Logger Log = LoggerFactory.getLogger(Transaction.class);
 
-	public static final int STARTED			= 0xFFFFFFFF;
-
-	public static final int ABORT_EXPLICIT 	= 1 << 0;
-	public static final int ABORT_RETRY 	= 1 << 1;
-	public static final int ABORT_CONFLICT 	= 1 << 2;
-	public static final int ABORT_CAPACITY 	= 1 << 3;
-	public static final int ABORT_DEBUG 	= 1 << 4;
-	public static final int ABORT_NESTED 	= 1 << 5;
-
-	private static final boolean RTM_AVAILABLE;
+	private static final boolean RTM_SUPPORT;
 	
-	private static final TransactionException NO_RTM_HARDWARE = new TransactionException("RTM not supported by current CPU");
-	private static final TransactionException NO_ACTIVE_TX = new TransactionException("No active transaction");
+	private static final Map<Object, Semaphore> SEMAPHORES = new WeakHashMap<Object, Semaphore>();
+
+	private static final RTMException NO_RTM_SUPPORT = new RTMException("RTM not supported by current CPU");
+	private static final RTMException NO_ACTIVE_TX = new RTMException("No active transaction");
 
 	static {
 		// Attempt to load native library from jar
@@ -69,23 +70,21 @@ public final class Transaction {
 			System.loadLibrary("javartm");
 		}
 
-		RTM_AVAILABLE = n_rtmAvailable();
-		if (!RTM_AVAILABLE) {
+		RTM_SUPPORT = n_rtmAvailable();
+		if (! RTM_SUPPORT) {
 			Log.warn("RTM not supported by current CPU. Attempting to use it may lead to JVM crashes");
 		}
 	}
-	
+
 	/**
 	 * The private, native API.
 	 */
 
-	/**
-	 * Test CPU for RTM support.
-	 */
+	// Test CPU for RTM support
 	private native static boolean n_rtmAvailable();
-	
+	// Test if there is an active transaction
 	private native static boolean n_inTransaction();
-	
+
 	private native static int n_begin();
 	private native static boolean n_commit();
 	/**
@@ -95,91 +94,127 @@ public final class Transaction {
 	private native static boolean n_abort(long reason);
 
 	//private native static <V> V n_doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock);
-	
+
 	/**
 	 * The public API.
 	 **/
-	public static short getAbortReason(int txStatus) {
-		return (short) (txStatus >>> 24);
-	}
-	
 	public static boolean inTransaction() {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
-		
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
+
 		return n_inTransaction();
 	}
-	
-	public static int begin(int tries) {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+
+	public static void begin() {
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
 		
 		int txStatus;
-		if (tries > 0) {
-			do {
-				tries--;
-				txStatus = n_begin();
-			} while(txStatus != STARTED && tries > 0);
-		} else {
-			do {
-				txStatus = n_begin();
-			} while(txStatus != STARTED);
+		if ((txStatus = n_begin()) == STARTED) {
+			return;
+		} else if (! isFlagged(txStatus, ABORT_EXPLICIT) ||
+				(isFlagged(txStatus, ABORT_EXPLICIT) && getAbortReason(txStatus) == 0xFF)) {
+			throw new CommitException(txStatus);
 		}
-		
-		return txStatus;
 	}
-	
-	public static int begin() {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
-		
-		return n_begin();
-	}
-	
+
 	public static void commit() {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
-		
-		final boolean status = n_commit();
-		if (! status) throw NO_ACTIVE_TX;
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
+
+		final boolean txStatus = n_commit();
+		if (! txStatus) throw NO_ACTIVE_TX;
 	}
-	
+
 	public static void abort(short reason) {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
-		
-		if (reason < 0 || reason > 255) {
-			throw new TransactionException("Abort reason has to be in the range [0;255] but " + reason + " was passed");
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
+
+		if (reason < 0 || reason >= 255) {
+			throw new RTMException("Abort reason has to be in the range [0;255[ but " + reason + " was passed");
 		}
-		final boolean status = n_abort((long) reason);
-		if (! status) throw NO_ACTIVE_TX;
+		final boolean txStatus = n_abort((long) reason);
+		if (! txStatus) throw NO_ACTIVE_TX;
+	}
+
+	public static void abort() {
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
+
+		final boolean txStatus = n_abort(0L);
+		if (! txStatus) throw NO_ACTIVE_TX;
 	}
 	
-	public static void abort() {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+	private static synchronized Semaphore getSemaphoreForAtomicBlock(Callable<?> atomicBlock) {
+		Semaphore semaphore;
+		if ((semaphore = SEMAPHORES.get(atomicBlock)) == null) {
+			semaphore = new Semaphore(1, true);
+			SEMAPHORES.put(atomicBlock, semaphore);
+		}
 		
-		final boolean status = n_abort(0L);
-		if (! status) throw NO_ACTIVE_TX;
+		return semaphore;
 	}
 	
 	public static <V> V doTransactionally(Callable<V> atomicBlock, Callable<V> fallbackBlock) throws Exception {
-		if (! RTM_AVAILABLE) throw NO_RTM_HARDWARE;
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
 		
-		int txStatus;
+		if (atomicBlock == fallbackBlock) {
+			throw new RTMException("atomicBlock and fallbackBlock can't reference the same object.");
+		}
+		
 		while (true) {
-			if ((txStatus = Transaction.begin()) == STARTED) {
-				V returnObject = atomicBlock.call();
-				Transaction.commit();
-				return returnObject;
-			} else if ((txStatus & ABORT_EXPLICIT) == 0) {
-				continue;
-			} else if (fallbackBlock == null) {
-				throw new ExplicitAbortException(getAbortReason(txStatus));
-			} else {
-				if (fallbackBlock instanceof FallbackBlock) {
-					((FallbackBlock) fallbackBlock).setAbortCode(txStatus);
+			try {
+				Transaction.begin();
+				V result = null;
+				try {
+					result = atomicBlock.call();
+				} catch (Throwable t) {
+					// we just can't do anything with the Throwable object
+					n_abort(0xFF);
 				}
+				Transaction.commit();
+				return result;
+			} catch (CommitException e) {
+				if (isFlagged(e.getTxStatus(), ABORT_RETRY)) {
+					// take advantage of the hardware hint
+					continue;
+				} // else
 				return fallbackBlock.call();
 			}
 		}
 	}
-	
+
 	public static <V> V doTransactionally(Callable<V> atomicBlock) throws Exception {
-		return doTransactionally(atomicBlock, null);
+		if (! RTM_SUPPORT) throw NO_RTM_SUPPORT;
+		
+		final Semaphore semaphore = getSemaphoreForAtomicBlock(atomicBlock);
+		while (true) {
+			try {
+				Transaction.begin();
+				if (semaphore.availablePermits() == 0) {
+					/* Started transaction but some other thread is executing
+					 * Callable atomicBlock non-speculatively, and so we abort.
+					 */
+					n_abort(0xFF);
+				} // else...
+
+				V result = null;
+				try {
+					result = atomicBlock.call();
+				} catch (Throwable t) {
+					// we just can't do anything with the Throwable object
+					n_abort(0xFF);
+				}
+				Transaction.commit();
+				return result;
+			} catch (CommitException e) {
+				if (isFlagged(e.getTxStatus(), ABORT_RETRY)) {
+					// take advantage of the hardware hint
+					continue;
+				} // else
+				semaphore.acquireUninterruptibly();
+				try {
+					return atomicBlock.call();
+				} finally {
+					semaphore.release();
+				}
+			}
+		}
 	}
+	
 }

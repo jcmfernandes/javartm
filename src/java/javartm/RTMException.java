@@ -20,15 +20,8 @@
  
 package javartm;
  
-public class ExplicitAbortException extends RuntimeException {
+public class RTMException extends RuntimeException {
 	
-	private final int reason;
+	RTMException(String msg) { super(msg); };
 	
-	ExplicitAbortException(int reason) {
-		this.reason = reason;
-	}
-	
-	public int getReason() {
-		return reason;
-	}
 }

@@ -20,6 +20,7 @@
 
 package javartm;
 
+import static javartm.TransactionStatus.*;
 import java.util.concurrent.Callable;
 
 public class Test {
@@ -75,12 +76,16 @@ public class Test {
 
 		res = false;
 
-		int txStatus = Transaction.begin();
-		if (txStatus == Transaction.STARTED) {
+		int txStatus;
+		try {
+			Transaction.begin();
+			txStatus = STARTED;
 			x = 2;
 			y = 2;
 			res = true;
 			Transaction.commit();
+		} catch (CommitException e) {
+			txStatus = e.getTxStatus();
 		}
 
 		System.out.println("Transaction result: " + res + " (x: " + x + ", y: " + y + ", txStatus: " + txStatus + ")");
@@ -91,7 +96,7 @@ public class Test {
 		try {
 			Transaction.commit();
 			throw new AssertionError("Should never happen");
-		} catch (TransactionException e) {
+		} catch (RTMException e) {
 			System.out.println("Successfully got an exception...");
 			e.printStackTrace();
 		}
@@ -102,7 +107,7 @@ public class Test {
 		try {
 			Transaction.abort();
 			System.out.println("Error: After abort!");
-		} catch (TransactionException e) {
+		} catch (RTMException e) {
 			System.out.println("Successfully got an exception...");
 			e.printStackTrace();
 		}
@@ -113,18 +118,21 @@ public class Test {
 		int statusZero = 0;
 		int retry = 0;
 		for (int i = 0; i <= 255; i++) {
-			txStatus = Transaction.begin();
-			if (txStatus == Transaction.STARTED) {
-				Transaction.abort((short) i);
-			}
-			if (((txStatus & Transaction.ABORT_EXPLICIT) != 0) && (Transaction.getAbortReason(txStatus) != i)) {
-				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus);
-			} else if (txStatus == 0) {
-				statusZero++;
-			} else if ((txStatus & Transaction.ABORT_RETRY) != 0) {
-				retry++;
-			} else if ((txStatus & Transaction.ABORT_EXPLICIT) == 0) {
-				System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus + " (bit 0 unset)");
+			try {
+			Transaction.begin();
+			txStatus = STARTED;
+			Transaction.abort((short) i);
+			} catch (CommitException e) {
+				txStatus = e.getTxStatus();
+				if (isFlagged(txStatus, ABORT_EXPLICIT) && getAbortReason(txStatus) != i) {
+					System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus);
+				} else if (txStatus == 0) {
+					statusZero++;
+				} else if (isFlagged(txStatus, ABORT_RETRY)) {
+					retry++;
+				} else if (! isFlagged(txStatus, ABORT_EXPLICIT)) {
+					System.out.println("Unexpected txStatus for i: " + i + " txStatus: " + txStatus + " (bit 0 unset)");
+				}
 			}
 		}
 		System.out.println("abort(0 -> 255) results: " + (255 - statusZero - retry) + " correct status codes; " +
